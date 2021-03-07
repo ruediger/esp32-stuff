@@ -1,0 +1,44 @@
+menu "Example Configuration"
+
+    config ESP_WIFI_SSID
+        string "WiFi SSID"
+        default "myssid"
+        help
+            SSID (network name) for the example to connect to.
+
+    config ESP_WIFI_PASSWORD
+        string "WiFi Password"
+        default "mypassword"
+        help
+            WiFi password (WPA or WPA2) for the example to use.
+
+    config ESP_MAXIMUM_RETRY
+        int "Maximum retry"
+        default 5
+        help
+            Set the Maximum retry to avoid station reconnecting to the AP unlimited when the AP is really inexistent.
+
+    config ESP_ECHO_CONNECT_PORT
+       int "Connect to echo port"
+       default -1
+       help
+           Set the port to connect to for echo client (-1 to disable).
+
+    config ESP_ECHO_CONNECT_ADDR
+       string "Connect to echo addr"
+       default "192.168.1.1"
+       help
+           IPv4 address of echo server to connect to.
+
+    config ESP_ECHO_CONNECT_MSG
+       string "Message to send to server"
+       default "Hello World"
+       help
+           Message to send to the server.
+
+    config ESP_ECHO_SERVER_PORT
+      int "Echo server port"
+      default -1
+      help
+          Set the echo server listening port (-1 to disable).
+endmenu

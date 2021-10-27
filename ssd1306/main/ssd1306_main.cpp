@@ -166,6 +166,60 @@ public:
     }
   }
 
+  /**
+   * @brief copy rectangle from src to buffer.
+   *
+   * @param x The x location to start copying to
+   * @param y The y location to start copying to
+   * @param w The width of the rectangle
+   * @param w The height of the rectangle
+   * @param src The src buffer
+   * @param swidth The width of the src buffer
+   * @param src_x X position to start copying from (default 0)
+   * @param src_y Y position to start copying from (default 0)
+   */
+  void blit(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const uint8_t* src, size_t swidth, uint8_t src_x=0, uint8_t src_y=0) {
+    assert(x + w <= width);
+    assert(src_x + w <= swidth);
+    const uint8_t begin = y / 8;
+    const uint8_t begin_r = y % 8;
+    const uint8_t end = (y+h) / 8;
+    const uint8_t end_r = (y+h) % 8;
+
+    if (begin == end) {
+      const uint8_t mbegin = (0xFF << begin_r) & 0xFF;
+      const uint8_t mend = 0xFF >> (8 - end_r);
+      const uint8_t mask = mbegin & mend;
+      for (size_t i = 0; i < w; ++i) {
+        const size_t n = x + i + begin * width;
+        const size_t m = src_x + i + src_y/8 * swidth;
+        buffer[n] |= mask & (src[m] << begin_r);
+      }
+    } else {
+      uint8_t mask = (0xFF << begin_r) & 0xFF;
+      for (size_t i = 0; i < w; ++i) {
+        const size_t n = x + i + begin * width;
+        const size_t m = src_x + i + src_y/8 * swidth;
+        buffer[n] |= mask & (src[m] << begin_r);
+      }
+
+      for (size_t j = 1; j < end-begin; ++j) {
+        for (size_t i = 0; i < w; ++i) {
+          const size_t n = x + i + (begin + j) * width;
+          const size_t m = src_x + i + (src_y/8 + j) * swidth;
+          buffer[n] = src[m];
+        }
+      }
+
+      mask = 0xFF >> (8 - end_r);
+      for (size_t i = 0; i < w; ++i) {
+        const size_t n = x + i + end * width;
+        const size_t m = src_x + i + (src_y + h)/8 * swidth;
+        buffer[n] |= mask & src[m];
+      }
+    }
+  }
+
 
   /**
    * @brief Initialise display
@@ -289,8 +343,16 @@ void app_main(void) {
   ESP_LOGI(TAG, "Display created");
   ESP_ERROR_CHECK(display.init());
   ESP_LOGI(TAG, "Display initialized");
-  for(uint8_t x = 30; x <= 98; ++x) {
-    for(uint8_t y = 10; y <= 56; ++y) {
+  // for(uint8_t x = 30; x <= 98; ++x) {
+  //   for(uint8_t y = 10; y <= 56; ++y) {
+  //     display.set_pixel(x, y);
+  //   }
+  // }
+
+#if 0
+  for (uint8_t x = 0; x <= 128; ++x) {
+    // Top 15 pixels are yellow, rest is blue.
+    for(uint8_t y = 0; y <= 15; ++y) {
       display.set_pixel(x, y);
     }
   }
@@ -319,6 +381,17 @@ void app_main(void) {
     contrast += 10;
     vTaskDelay(5000 / portTICK_PERIOD_MS);
   }
+#else
+  const uint8_t src[] = {0b11111110, 0b11111110, 0b01100000, 0b01100000, 0b01100000, 0b01100000, 0b01100000, 0b01100000, 0b11111110, 0b11111110, 0b00000000, 0b11111110, 0b11111110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b00000000, 0b00000000, 0b00000000, 0b11111110, 0b11111110, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b11111110, 0b11111110, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b11111000, 0b11111000, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b11111000, 0b11111000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b11111110, 0b11111110, 0b00000000, 0b00000000, 0b11100000, 0b11100000, 0b00000000, 0b00000000, 0b11111110, 0b11111110, 0b00000000, 0b11111000, 0b11111000, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b11111000, 0b11111000, 0b00000000, 0b11111110, 0b11111110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b10011000, 0b10011000, 0b00000000, 0b00000000, 0b00000000, 0b11111110, 0b11111110, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b11111110, 0b11111110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b11111000, 0b11111000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b01111110, 0b01111110, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b00000111, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b00000111, 0b00000000, 0b00000111, 0b00000111, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b00000111, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b00000111, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000000, 0b00000000, 0b00000000, 0b00000001, 0b00000001, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000001, 0b00000001, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000001, 0b00000001, 0b00000110, 0b00000110, 0b00000001, 0b00000001, 0b00000110, 0b00000110, 0b00000001, 0b00000001, 0b00000000, 0b00000001, 0b00000001, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000001, 0b00000001, 0b00000000, 0b00000111, 0b00000111, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b00000111, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b00000111, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b00000111, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000001, 0b00000001, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000110, 0b00000110, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000};
+  const uint8_t swidth = 132;
+  display.blit(0, 32, 128, 10, src, swidth);
+  ESP_LOGI(TAG, "Display pixels set");
+  ESP_ERROR_CHECK(display.display());
+  ESP_LOGI(TAG, "Display displayed");
+  for (int i = 0; i < 10; ++i) {
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+#endif
 
   ESP_ERROR_CHECK(i2c_driver_delete(I2C_MASTER_NUM));
   ESP_LOGI(TAG, "I2C unitialized successfully");

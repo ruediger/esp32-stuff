@@ -1,2 +1,22 @@
+find_package (Python COMPONENTS Interpreter)
+
+if(NOT CMAKE_BUILD_EARLY_EXPANSION)
+  add_custom_target(
+    font5x5 ALL
+    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/font5x5.hpp)
+
+  add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/font5x5.hpp
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/generate_glyphs.py
+    COMMAND
+    "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/generate_glyphs.py" --multiplier 1 > ${CMAKE_CURRENT_BINARY_DIR}/font5x5.hpp
+    VERBATIM)
+
+  #add_dependencies(${COMPONENT_LIB} font5x5)
+
+  set_property(DIRECTORY "${COMPONENT_DIR}" APPEND PROPERTY
+    ADDITIONAL_MAKE_CLEAN_FILES font5x5.hpp)
+endif()
+
 idf_component_register(SRCS "ssd1306_main.cpp"
-                    INCLUDE_DIRS ".")
+                    INCLUDE_DIRS "." "${CMAKE_CURRENT_BINARY_DIR}")

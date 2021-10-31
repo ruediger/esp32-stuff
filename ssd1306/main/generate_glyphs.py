@@ -244,16 +244,19 @@ _TEMPLATE = """\
 #ifndef FONT{size}_HPP
 #define FONT{size}_HPP
 
+#include "font.hpp"
+
 namespace font{size} {{
-  const size_t width = {width};
-  const size_t height = {height};
   const uint8_t glyphs[][{length}] = {data};
+  const uint8_t *glyphptrs[] = {refs};
+
+  font font{size} {{
+    {width}, {height}, sizeof(glyphs)/sizeof(glyphs[0]), glyphptrs,
+  }};
 }}
 
 #endif\
 """
-
-## TODO -> font{size} width, height, glyphs
 
 def split_glyph(d: str) -> (int, int, List[str]):
     """Split glyph and return width, height, and glyph broken into lines."""
@@ -298,9 +301,11 @@ def render_template(glyphs: Sequence[str]) -> str:
     width, height, _ = split_glyph(glyphs[0])
 
     data = [format_seq(to_buffer(d)) for d in glyphs]
+    refs = [f'glyphs[{i}]' for i in range(len(glyphs))]
 
     return _TEMPLATE.format(
         data='{\n    ' + ',\n    '.join(data) + '\n  }',
+        refs='{\n    ' + ',\n    '.join(refs) + '\n  }',
         size=f'{width}x{height}',
         width=width,
         height=height,

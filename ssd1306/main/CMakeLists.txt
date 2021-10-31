@@ -12,6 +12,18 @@ if(NOT CMAKE_BUILD_EARLY_EXPANSION)
     "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/generate_glyphs.py" --multiplier 1 > ${CMAKE_CURRENT_BINARY_DIR}/font5x5.hpp
     VERBATIM)
 
+  add_custom_target(
+    font10x10 ALL
+    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/font10x10.hpp)
+
+  add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/font10x10.hpp
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/generate_glyphs.py
+    COMMAND
+    "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/generate_glyphs.py" --multiplier 2 > ${CMAKE_CURRENT_BINARY_DIR}/font10x10.hpp
+    VERBATIM)
+
+
   #add_dependencies(${COMPONENT_LIB} font5x5)
 
   set_property(DIRECTORY "${COMPONENT_DIR}" APPEND PROPERTY

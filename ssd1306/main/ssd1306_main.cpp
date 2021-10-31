@@ -12,6 +12,7 @@
 #include "freertos/task.h"
 
 #include "font5x5.hpp"
+#include "font10x10.hpp"
 
 extern "C" {
     void app_main(void);
@@ -364,18 +365,17 @@ size_t char_to_glyphidx(char c) {
   return INVALID_GLYPH_IDX;  // Default to space
 }
 
-esp_err_t render_font(SSD1306Display &display, const char *s, size_t n, uint8_t x, uint8_t y, uint8_t dx=1) {
+esp_err_t render_font(SSD1306Display &display, const font& font, const char *s, size_t n, uint8_t x, uint8_t y, uint8_t dx=1) {
   uint8_t x_ = x;
   for (size_t i = 0; i < n; ++i) {
     const size_t glyphidx{char_to_glyphidx(s[i])};
     if (glyphidx == INVALID_GLYPH_IDX) {  // Skip invalid glyphs
       continue;
     }
-    const uint8_t * const glyph = font5x5::glyphs[glyphidx];
-    display.blit(x_, y, font5x5::width, font5x5::height, glyph, font5x5::width);
-    x_ += font5x5::width + dx;
-    if (x_ >= display.get_width()) {
-      break; // TODO: Return error?
+    display.blit(x_, y, font.width, font.height, font.glyphs[glyphidx], font.width);
+    x_ += font.width + dx;
+    if (x_ + font.width >= display.get_width()) {
+      return ESP_ERR_INVALID_SIZE;
     }
   }
 
@@ -446,7 +446,8 @@ void app_main(void) {
   // display.blit(0, 32, 128, 10, src, swidth);
 
 
-  render_font(display, "Hello World!", 12, 0, 32);
+  render_font(display, font5x5::font5x5, "Hello World!", 12, 0, 32);
+  render_font(display, font10x10::font10x10, "Hello World!", 12, 0, 44);
   ESP_LOGI(TAG, "Display pixels set");
   ESP_ERROR_CHECK(display.display());
   ESP_LOGI(TAG, "Display displayed");

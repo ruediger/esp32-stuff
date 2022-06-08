@@ -177,54 +177,81 @@ public:
   /**
    * @brief copy rectangle from src to buffer.
    *
-   * @param x The x location to start copying to
-   * @param y The y location to start copying to
-   * @param w The width of the rectangle
-   * @param w The height of the rectangle
+   * @param dst_x The X position to start copying to
+   * @param dst_y The Y position to start copying to
    * @param src The src buffer
    * @param swidth The width of the src buffer
-   * @param src_x X position to start copying from (default 0)
-   * @param src_y Y position to start copying from (default 0)
+   * @param src_x The X position to start copying from
+   * @param src_y The Y position to start copying from
+   * @param w The width of the rectangle
+   * @param h The height of the rectangle
    */
-  void blit(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const uint8_t* src, size_t swidth, uint8_t src_x=0, uint8_t src_y=0) {
-    assert(x + w <= width);
+  void blit(uint32_t dst_x, uint32_t dst_y, const uint8_t* src, size_t swidth, uint32_t src_x, uint32_t src_y, uint32_t w, uint32_t h) {
+    assert(dst_x + w <= width);
     assert(src_x + w <= swidth);
-    const uint8_t begin = y / 8;
-    const uint8_t begin_r = y % 8;
-    const uint8_t end = (y+h) / 8;
-    const uint8_t end_r = (y+h) % 8;
 
-    if (begin == end) {
-      const uint8_t mbegin = (0xFF << begin_r) & 0xFF;
-      const uint8_t mend = 0xFF >> (8 - end_r);
-      const uint8_t mask = mbegin & mend;
-      for (size_t i = 0; i < w; ++i) {
-        const size_t n = x + i + begin * width;
-        const size_t m = src_x + i + src_y/8 * swidth;
-        buffer[n] |= mask & (src[m] << begin_r);
-      }
-    } else {
-      uint8_t mask = (0xFF << begin_r) & 0xFF;
-      for (size_t i = 0; i < w; ++i) {
-        const size_t n = x + i + begin * width;
-        const size_t m = src_x + i + src_y/8 * swidth;
-        buffer[n] |= mask & (src[m] << begin_r);
+    uint32_t src_begin_n = src_y / 8;
+    uint32_t src_begin_b = src_y % 8;
+    const uint32_t src_end_b = (src_y + h) % 8;
+    const uint32_t src_end_n = (src_y + h) / 8 + (src_end_b > 0 ? 1 : 0);  // point src_end_n to one after the last element.
+
+    uint32_t dst_begin_n = dst_y / 8;
+    uint32_t dst_begin_b = dst_y % 8;
+
+    for (uint32_t iy = 0; src_begin_n < src_end_n; ++iy) {
+      uint32_t mask = 0xFF;
+      uint32_t shift = 0;
+      uint32_t n = 8;  // number of bits from src
+
+      if (src_begin_n == src_end_n -1 and 0 < src_end_b and src_end_b < 8) {
+        n = src_end_b;
+        mask &= 0xFF >> (8 - src_end_b);
       }
 
-      for (size_t j = 1; j < end-begin; ++j) {
-        for (size_t i = 0; i < w; ++i) {
-          const size_t n = x + i + (begin + j) * width;
-          const size_t m = src_x + i + (src_y/8 + j) * swidth;
-          buffer[n] = src[m];
+      if (src_begin_b > 0) {
+        n -= src_begin_b;
+        mask &= (0xFF << src_begin_b) & 0xFF;
+        shift = src_begin_b;
+        src_begin_b = 0;
+      }
+
+      const uint32_t sidx_y = src_begin_n * swidth;
+      const uint32_t didx_y = dst_begin_n * width;
+      const uint32_t didx_y1 = didx_y + width;
+
+      for (uint32_t ix = 0; ix < w; ++ix) {
+        const uint32_t sidx = src_x + ix + sidx_y;
+        const uint32_t src_block = (src[sidx] & mask) >> shift;
+
+        const uint32_t didx = dst_x + ix + didx_y;
+        if (n > 8 - dst_begin_b) { // is the block too large to fit into current dst byte?
+          buffer[didx] &= ~((0xFF << dst_begin_b) & 0xFF);  // clear drawing area
+          // Split into two blocks
+          const uint32_t lower = (src_block << dst_begin_b) & 0xFF;
+          buffer[didx] |= lower;
+
+          const uint32_t didx1 = dst_x + ix + didx_y1;
+          buffer[didx1] &= ~(0xFF >> (8 - dst_begin_b));  // clear drawing area
+          const uint32_t higher = src_block >> (8 - dst_begin_b);
+          buffer[didx1] |= higher;
+        } else {
+          buffer[didx] &= ~((0xFF << dst_begin_b) & 0xFF);  // clear drawing area
+          buffer[didx] |= src_block << dst_begin_b;
         }
       }
 
-      mask = 0xFF >> (8 - end_r);
-      for (size_t i = 0; i < w; ++i) {
-        const size_t n = x + i + end * width;
-        const size_t m = src_x + i + (src_y + h)/8 * swidth;
-        buffer[n] |= mask & src[m];
+      if (n > 8 - dst_begin_b) {
+        dst_begin_n++;
+        dst_begin_b = n - (8 - dst_begin_b);
+      } else {
+        dst_begin_b += n;
+        if (dst_begin_b == 8) {
+          dst_begin_n++;
+          dst_begin_b = 0;
+        }
+        assert(dst_begin_b < 8);
       }
+      src_begin_n++;
     }
   }
 
@@ -372,7 +399,7 @@ esp_err_t render_font(SSD1306Display &display, const font& font, const char *s, 
     if (glyphidx == INVALID_GLYPH_IDX) {  // Skip invalid glyphs
       continue;
     }
-    display.blit(x_, y, font.width, font.height, font.glyphs[glyphidx], font.width);
+    display.blit(x_, y, font.glyphs[glyphidx], font.width, 0, 0, font.width, font.height);
     x_ += font.width + dx;
     if (x_ + font.width >= display.get_width()) {
       return ESP_ERR_INVALID_SIZE;
@@ -441,13 +468,11 @@ void app_main(void) {
     vTaskDelay(5000 / portTICK_PERIOD_MS);
   }
 #else
-  // const uint8_t src[] = {0b11111110, 0b11111110, 0b01100000, 0b01100000, 0b01100000, 0b01100000, 0b01100000, 0b01100000, 0b11111110, 0b11111110, 0b00000000, 0b11111110, 0b11111110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b00000000, 0b00000000, 0b00000000, 0b11111110, 0b11111110, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b11111110, 0b11111110, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b11111000, 0b11111000, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b11111000, 0b11111000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b11111110, 0b11111110, 0b00000000, 0b00000000, 0b11100000, 0b11100000, 0b00000000, 0b00000000, 0b11111110, 0b11111110, 0b00000000, 0b11111000, 0b11111000, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b11111000, 0b11111000, 0b00000000, 0b11111110, 0b11111110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b01100110, 0b10011000, 0b10011000, 0b00000000, 0b00000000, 0b00000000, 0b11111110, 0b11111110, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b11111110, 0b11111110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b11111000, 0b11111000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b01111110, 0b01111110, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b00000111, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b00000111, 0b00000000, 0b00000111, 0b00000111, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b00000111, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b00000111, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000000, 0b00000000, 0b00000000, 0b00000001, 0b00000001, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000001, 0b00000001, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000001, 0b00000001, 0b00000110, 0b00000110, 0b00000001, 0b00000001, 0b00000110, 0b00000110, 0b00000001, 0b00000001, 0b00000000, 0b00000001, 0b00000001, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000001, 0b00000001, 0b00000000, 0b00000111, 0b00000111, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b00000111, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b00000111, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b00000111, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000110, 0b00000001, 0b00000001, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000110, 0b00000110, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000};
-  // const uint8_t swidth = 132;
-  // display.blit(0, 32, 128, 10, src, swidth);
 
-
-  render_font(display, font5x5::font5x5, "Hello World!", 12, 0, 32);
-  render_font(display, font10x10::font10x10, "Hello World!", 12, 0, 44);
+  for (uint8_t i = 0; i < 59; i+= 6) {
+    render_font(display, font5x5::font5x5, "Hello Pau!", 10, 0, i);
+  }
+  //render_font(display, font10x10::font10x10, "Hello World!", 12, 0, 44);
   ESP_LOGI(TAG, "Display pixels set");
   ESP_ERROR_CHECK(display.display());
   ESP_LOGI(TAG, "Display displayed");

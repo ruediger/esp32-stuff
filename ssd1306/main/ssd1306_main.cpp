@@ -117,7 +117,7 @@ class SSD1306Display {
     }
 
     i2c_master_stop(handle);
-    err = i2c_master_cmd_begin(i2c_num, handle, I2C_MASTER_TIMEOUT_MS / portTICK_RATE_MS);
+    err = i2c_master_cmd_begin(i2c_num, handle, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
     if (err != ESP_OK) {
       ESP_LOGE(TAG, "i2c_master_cmd_begin(...) -> %d", err);
     }

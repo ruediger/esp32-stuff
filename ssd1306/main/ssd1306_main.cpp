@@ -13,6 +13,7 @@
 
 #include "font5x5.hpp"
 #include "font10x10.hpp"
+#include "font30x30.hpp"
 
 extern "C" {
     void app_main(void);
@@ -356,6 +357,13 @@ public:
 };
 
 const size_t INVALID_GLYPH_IDX = 0xFFFF;
+
+/**
+ * @brief Convert character to glyph index.
+ *
+ * @param c The character code
+ * @return Glyph index or INVALID_GLYPH_IDX
+ */
 size_t char_to_glyphidx(char c) {
   if ('0' <= c && c <= '9') {
     return c - '0';
@@ -389,6 +397,18 @@ size_t char_to_glyphidx(char c) {
   return INVALID_GLYPH_IDX;  // Default to space
 }
 
+/**
+ * @brief Render text to display using specified font.
+ *
+ * @param display SSD1306 display to render to.
+ * @param font The font to use
+ * @param s String to render
+ * @param n Length of the string
+ * @param x The start x position on the screen
+ * @param y The start y position on the screen
+ * @param dx The gap between glyphs (default 1px)
+ * @return Error if the text is too large for the screen. (Still renders text until the last glyph).
+ */
 esp_err_t render_font(SSD1306Display &display, const font& font, const char *s, size_t n, uint8_t x, uint8_t y, uint8_t dx=1) {
   uint8_t x_ = x;
   for (size_t i = 0; i < n; ++i) {
@@ -466,11 +486,11 @@ void app_main(void) {
   }
 #else
 
-  for (uint8_t i = 0; i < 59; i += 12) {
-    //render_font(display, font5x5::font5x5, "Hello Pau!", 10, 0, i);
-    render_font(display, font10x10::font10x10, "Hello Pau!", 10, 0, i);
-  }
-  //render_font(display, font10x10::font10x10, "Hello World!", 12, 0, 44);
+  // for (uint8_t i = 0; i < 59; i += 12) {
+  //   //render_font(display, font5x5::font5x5, "Hello Pau!", 10, 0, i);
+  //   render_font(display, font10x10::font10x10, "Hello Pau!", 10, 0, i);
+  // }
+  render_font(display, font30x30::font30x30, "100%", 4, 0, 17);
   ESP_LOGI(TAG, "Display pixels set");
   ESP_ERROR_CHECK(display.display());
   ESP_LOGI(TAG, "Display displayed");

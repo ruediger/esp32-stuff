@@ -198,12 +198,13 @@ public:
     uint32_t dst_begin_n = dst_y / 8;
     uint32_t dst_begin_b = dst_y % 8;
 
-    for (uint32_t iy = 0; src_begin_n < src_end_n; ++iy) {
+    for (; src_begin_n < src_end_n; ++src_begin_n) {
+      // First step is to take as many bits from current src byte as possible.
       uint32_t mask = 0xFF;
       uint32_t shift = 0;
       uint32_t n = 8;  // number of bits from src
 
-      if (src_begin_n == src_end_n -1 and 0 < src_end_b and src_end_b < 8) {
+      if (src_begin_n == src_end_n - 1 and 0 < src_end_b) {
         n = src_end_b;
         mask &= 0xFF >> (8 - src_end_b);
       }
@@ -215,31 +216,28 @@ public:
         src_begin_b = 0;
       }
 
-      const uint32_t sidx_y = src_begin_n * swidth;
-      const uint32_t didx_y = dst_begin_n * width;
-      const uint32_t didx_y1 = didx_y + width;
+      const uint32_t src_idx_y = src_begin_n * swidth;
+      const uint32_t dst_idx_y = dst_begin_n * width;
+      const uint32_t dst_idx_y1 = dst_idx_y + width;
 
       for (uint32_t ix = 0; ix < w; ++ix) {
-        const uint32_t sidx = src_x + ix + sidx_y;
-        const uint32_t src_block = (src[sidx] & mask) >> shift;
+        const uint32_t src_idx = src_x + ix + src_idx_y;
+        const uint32_t src_block = (src[src_idx] & mask) >> shift;
 
-        const uint32_t didx = dst_x + ix + didx_y;
+        const uint32_t dst_idx = dst_x + ix + dst_idx_y;
+
+        // Second step is to put the src bits into dst buffer, potentially requiring two bytes.
+        buffer[dst_idx] &= ~((0xFF << dst_begin_b) & 0xFF);  // clear drawing area
+        buffer[dst_idx] |= (src_block << dst_begin_b) & 0xFF;
         if (n > 8 - dst_begin_b) { // is the block too large to fit into current dst byte?
-          buffer[didx] &= ~((0xFF << dst_begin_b) & 0xFF);  // clear drawing area
-          // Split into two blocks
-          const uint32_t lower = (src_block << dst_begin_b) & 0xFF;
-          buffer[didx] |= lower;
-
-          const uint32_t didx1 = dst_x + ix + didx_y1;
-          buffer[didx1] &= ~(0xFF >> (8 - dst_begin_b));  // clear drawing area
-          const uint32_t higher = src_block >> (8 - dst_begin_b);
-          buffer[didx1] |= higher;
-        } else {
-          buffer[didx] &= ~((0xFF << dst_begin_b) & 0xFF);  // clear drawing area
-          buffer[didx] |= src_block << dst_begin_b;
+          // blit upper part into next byte
+          const uint32_t dst_idx1 = dst_x + ix + dst_idx_y1;
+          buffer[dst_idx1] &= ~(0xFF >> (8 - dst_begin_b));  // clear drawing area
+          buffer[dst_idx1] |= src_block >> (8 - dst_begin_b);
         }
       }
 
+      // Move dst pointers forward.
       if (n > 8 - dst_begin_b) {
         dst_begin_n++;
         dst_begin_b = n - (8 - dst_begin_b);
@@ -251,7 +249,6 @@ public:
         }
         assert(dst_begin_b < 8);
       }
-      src_begin_n++;
     }
   }
 
@@ -469,8 +466,9 @@ void app_main(void) {
   }
 #else
 
-  for (uint8_t i = 0; i < 59; i+= 6) {
-    render_font(display, font5x5::font5x5, "Hello Pau!", 10, 0, i);
+  for (uint8_t i = 0; i < 59; i += 12) {
+    //render_font(display, font5x5::font5x5, "Hello Pau!", 10, 0, i);
+    render_font(display, font10x10::font10x10, "Hello Pau!", 10, 0, i);
   }
   //render_font(display, font10x10::font10x10, "Hello World!", 12, 0, 44);
   ESP_LOGI(TAG, "Display pixels set");

@@ -133,7 +133,7 @@ class SSD1680Eink {
 
   const uint8_t BLACK = 0;
   const uint8_t WHITE = 1;
-  const uint8_t NOT_RED = 1;
+  const uint8_t NOT_RED = 0;
   const uint8_t RED = 1;
 
 public:
@@ -152,7 +152,7 @@ public:
 
   void clear_buffer() {
     if (buffer_size > 0) {
-      memset(blackwhite_buffer, WHITE, buffer_size);
+      memset(blackwhite_buffer, BLACK, buffer_size);
       memset(red_buffer, NOT_RED, buffer_size);
     }
   }
@@ -164,19 +164,21 @@ public:
   };
 
   void draw_pixel(unsigned x, unsigned y, Pixel p) {
-    const unsigned n = x + y/8 * width;
+    // Round up to next multiple of 8
+    const unsigned _height = (height % 8) ? (height + 8 - (height%8)) : height;
+    const unsigned n = ((width - 1 - x) * _height + y)/8;
     assert(n < buffer_size);
     switch (p) {
     case Pixel::White:
-      blackwhite_buffer[n] |= 1 << (y & 7);  // White = 1
-      red_buffer[n] &= ~(1 << (y & 7));  // Clear red
+      blackwhite_buffer[n] |= 1 << (7 - (y & 7));  // White = 1
+      red_buffer[n] &= ~(1 << (7 - (y & 7)));  // Clear red
       break;
     case Pixel::Black:
-      blackwhite_buffer[n] &= ~(1 << (y & 7));
-      red_buffer[n] &= ~(1 << (y & 7));
+      blackwhite_buffer[n] &= ~(1 << (7 - (y & 7)));
+      red_buffer[n] &= ~(1 << (7 - (y & 7)));
       break;
     case Pixel::Red:
-      red_buffer[n] |= 1 << (y & 7);
+      red_buffer[n] |= 1 << (7 - (y & 7));
       break;
     }
   }
@@ -210,13 +212,13 @@ public:
                         TAG, "gpio_set_direction(busy_pin=%d, in)", busy_pin);
 
     // Set Initial Configuration
-    spi_device_interface_config_t devcfg={
-      .mode=0,
-      .clock_speed_hz=10*1000*1000, // hmm? 40 MHz
-      .spics_io_num=cs_pin,
-      .queue_size=7,
-      .pre_cb=&SSD1680Eink::spi_pre_transfer_cb,
-    };
+    spi_device_interface_config_t devcfg;
+    memset(&devcfg, 0, sizeof(devcfg));
+    devcfg.mode=0;
+    devcfg.clock_speed_hz=4*1000*1000; // 4 MHz
+    devcfg.spics_io_num=cs_pin;
+    devcfg.queue_size=7;
+    devcfg.pre_cb=&SSD1680Eink::spi_pre_transfer_cb;
     ESP_RETURN_ON_ERROR(spi_bus_add_device(HSPI_HOST, &devcfg, &spi), TAG, "spi_bus_add_device");
 
     ESP_RETURN_ON_ERROR(hardware_reset(), TAG, "HardwareReset");
@@ -228,7 +230,7 @@ public:
     const uint8_t endy_hi = (width - 1) >> 8;
 
     const cmds init_cmds[] = {
-      { Command::DataEntryModeSetting, {0x03}, 1 },  // y,x increment, x-mode
+      { Command::DataEntryModeSetting, {0x03}, 1 },  // y,x increment, x-mode... XXX y-mode
       { Command::BorderWaveformControl, {0x05}, 1},  // Follow LUT, LUT1
       { Command::WriteVCOMRegister, {0x36}, 1}, //  36???
       { Command::GateDrivingVoltageControl, {0x17}, 1},  // VGH, 20V
@@ -238,6 +240,7 @@ public:
       { Command::SetRAMXAddressPositions, {0x01, height_bytes}, 2},  // 1 to height/8
       { Command::SetRAMYAddressPositions, {0x00, 0x00, endy_lo, endy_hi}, 4},  // 0 to width
       { Command::DriverOutputControl, {endy_lo, endy_hi, 0x00}, 3},
+      { Command::DisplayUpdateControl2, {0xF4}, 1},
     };
     ESP_RETURN_ON_ERROR(send_commands(init_cmds, sizeof(init_cmds)/sizeof(init_cmds[0])),
                         TAG, "send_commands");
@@ -277,14 +280,14 @@ public:
 };
 
 void app_main(void) {
-  spi_bus_config_t buscfg={
-    .mosi_io_num=PIN_NUM_SDI,
-    .miso_io_num=-1,
-    .sclk_io_num=PIN_NUM_SCK,
-    .quadwp_io_num=-1,
-    .quadhd_io_num=-1,
-    .max_transfer_sz=16*320*2+8, // TODO?!
-  };
+  spi_bus_config_t buscfg;
+  memset(&buscfg, 0, sizeof(buscfg));
+  buscfg.mosi_io_num=PIN_NUM_SDI;
+  buscfg.miso_io_num=-1;
+  buscfg.sclk_io_num=PIN_NUM_SCK;
+  buscfg.quadwp_io_num=-1;
+  buscfg.quadhd_io_num=-1;
+  buscfg.max_transfer_sz=16*320*2+8; // TODO?!
   ESP_LOGI(TAG, "Init SPI!");
   ESP_ERROR_CHECK(spi_bus_initialize(HSPI_HOST, &buscfg, SPI_DMA_CH_AUTO));
 
@@ -294,9 +297,10 @@ void app_main(void) {
   ESP_ERROR_CHECK(ssd1680eink.init());
 
   ESP_LOGI(TAG, "Draw!");
-  for (unsigned x = 0; x < 20; ++x) {
-    for (unsigned y = 0; y < 20; ++y) {
-      const SSD1680Eink::Pixel p = (5 < x && x < 10 && 5 < y && y < 10) ? SSD1680Eink::Red : SSD1680Eink::Black;
+  for (unsigned x = 10; x < WIDTH-10; ++x) {
+    for (unsigned y = 0; y < HEIGHT; y+=10) {
+      //const SSD1680Eink::Pixel p = (5 < x && x < 10 && 5 < y && y < 10) ? SSD1680Eink::Red : SSD1680Eink::Black;
+      const SSD1680Eink::Pixel p = SSD1680Eink::White;
       ssd1680eink.draw_pixel(x, y, p);
     }
   }
